@@ -12,6 +12,10 @@ import org.eclipse.lsp4j.services._
 import org.eclipse.lsp4j.launch._
 import org.eclipse.lsp4j.jsonrpc.Launcher
 
+import scala.collection._
+import scala.collection.JavaConverters._
+import scala.language.implicitConversions
+
 import jupyterlsp._
 
 import dotty.tools.repl.server
@@ -56,18 +60,28 @@ class LspReplClient extends ReplClient { thisClient =>
     println("ReplStarted !")
     while (true) {
       val code = scala.io.StdIn.readLine("lsp-repl-poc> ")
-      var futureResult = server.interpret(ReplInterpretParams(code))
-      var result = futureResult.get()
-      print(result.output)
-      interruptibleFuture(() => futureResult) {
-        while (result.hasMore && !futureResult.isCancelled) {
-          futureResult = server.interpretResults(GetReplResult(result.runId))
-          try {
-            result = futureResult.get()
-            print(result.output)
-          } catch {
-            case _: CancellationException =>
-              println("Cancelled")
+      // Code completion
+      if (code.endsWith("?")) {
+        val position = code.length - 1
+        val futureCompletions = server.replCompletion(ReplCompletionParams(position=position, code=code.init))
+        val completionsEither = futureCompletions.get()
+        val completions: List[CompletionItem] = (if (completionsEither.isLeft) completionsEither.getLeft
+                                                 else completionsEither.getRight().getItems).asScala.toList
+        println(completions.map(_.getLabel).distinct.mkString("  –  "))
+      } else {
+        var futureResult = server.interpret(ReplInterpretParams(code))
+        interruptibleFuture(() => futureResult) {
+          var result = futureResult.get()
+          print(result.output)
+          while (result.hasMore && !futureResult.isCancelled) {
+            futureResult = server.interpretResults(GetReplResult(result.runId))
+            try {
+              result = futureResult.get()
+              print(result.output)
+            } catch {
+              case _: CancellationException =>
+                println("Cancelled")
+            }
           }
         }
       }
