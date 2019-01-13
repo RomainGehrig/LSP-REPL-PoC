@@ -9,8 +9,8 @@ lazy val root = project
     connectInput in run := true,
     outputStrategy := Some(StdoutOutput),
 
-    fork in run := true,
-    fork in Test := true,
+    // fork in run := true,
+    // fork in Test := true,
 
     scalaVersion := dottyVersion,
 
