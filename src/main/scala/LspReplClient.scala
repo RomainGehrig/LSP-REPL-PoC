@@ -58,8 +58,10 @@ class LspReplClient extends ReplClient { thisClient =>
 
   def start(): Unit = {
     println("ReplStarted !")
+
     while (true) {
       val code = scala.io.StdIn.readLine("lsp-repl-poc> ")
+
       // Code completion
       if (code.endsWith("?")) {
         val position = code.length - 1
@@ -69,18 +71,28 @@ class LspReplClient extends ReplClient { thisClient =>
                                                  else completionsEither.getRight().getItems).asScala.toList
         println(completions.map(_.getLabel).distinct.mkString("  –  "))
       } else {
+        // Code execution
         var futureResult = server.interpret(ReplInterpretParams(code))
-        interruptibleFuture(() => futureResult) {
+
+        val waitingInterrupt = new CompletableFuture[Boolean]()
+        val runInterrupt = futureResult.thenCombine(waitingInterrupt, (replRes: ReplInterpretResult, _: Boolean) =>  replRes.runId)
+          .thenCompose{ runId: Int => {
+                         server.interruptRun(ReplRunIdentifier(runId))
+                       }
+          }
+
+        interruptibleFuture(waitingInterrupt) {
           var result = futureResult.get()
           print(result.output)
           while (result.hasMore && !futureResult.isCancelled) {
-            futureResult = server.interpretResults(GetReplResult(result.runId))
-            try {
-              result = futureResult.get()
-              print(result.output)
-            } catch {
-              case _: CancellationException =>
-                println("Cancelled")
+            futureResult = server.interpretResults(ReplRunIdentifier(result.runId))
+            CompletableFuture.anyOf(futureResult, runInterrupt).get match {
+              case int: ReplInterruptResult =>
+                println(int.stacktrace)
+                futureResult.cancel(true)
+              case res: ReplInterpretResult =>
+                result = res
+                print(result.output)
             }
           }
         }
@@ -88,11 +100,11 @@ class LspReplClient extends ReplClient { thisClient =>
     }
   }
 
-  private def interruptibleFuture[T](getFuture: () => CompletableFuture[_])(t: => T): T = {
+  private def interruptibleFuture[T](future: => CompletableFuture[Boolean])(t: => T): T = {
     val oldHandler = sun.misc.Signal.handle(new Signal("INT"),
                                             new SignalHandler() {
                                               def handle(sig: Signal) = {
-                                                getFuture().cancel(true)
+                                                future.complete(true)
                                               }
                                             })
     try {
