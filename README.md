@@ -1,9 +1,13 @@
-## sbt project compiled with Dotty
+LSP REPL Proof-of-Concept
+---------
 
-### Usage
+It works !
 
-This is a normal sbt project, you can compile code with `sbt compile` and run it
-with `sbt run`, `sbt console` will start a Dotty REPL.
+Need to run in Dotty's sbt: `repl-server/publishLocal` to have the LSP API available here. Then, still in Dotty's sbt: `repl-server/run 12555` to run the LSP Repl server (need to run a new instance for each new connection)
 
-For more information on the sbt-dotty plugin, see the
-[dotty-example-project](https://github.com/lampepfl/dotty-example-project/blob/master/README.md).
+You can now run `sbt run` in this project to launch a LSP-backed REPL.
+
+* `<Enter>` to run the code
+* `printl?<Enter>` to ask for the completion of `printl`
+* `<CTRL>+C` to issue an interrupt request when code is running
+*  Quit with `<CTRL>+C` twice.
